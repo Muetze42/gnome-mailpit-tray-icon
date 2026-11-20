@@ -4,7 +4,7 @@ This project uses AI assistance during development. This document explains when 
 
 ## Commit Message Tagging
 
-### [AI-assisted]
+### AI-assisted
 
 This tag indicates AI helped in the development process, but a human reviewed, modified, or significantly guided the
 code.
@@ -15,7 +15,7 @@ code.
 - `refactor: improve runner health check logic [AI-assisted]`
 - `fix: resolve dependency validation issue [AI-assisted]`
 
-### [AI-generated]
+### AI-generated
 
 This tag indicates AI-generated code with minimal or no human modification beyond acceptance.
 

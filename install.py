@@ -47,6 +47,9 @@ def main():
     def quote(value):
         return '"' + str(value).replace('\\', '\\\\').replace('"', '\\"').replace('$', '\\$').replace('`', '\\`') + '"'
     launcher = (source / 'mailpit-tray.desktop').read_text().replace('@EXEC@', quote(app).replace('%', '%%').replace('\\', '\\\\'))
+    # Resolve the SVG directly instead of relying on the desktop's icon cache.
+    icon_path = str(icons / 'mailpit-running.svg').replace('\\', '\\\\')
+    launcher = launcher.replace('@ICON@', icon_path)
     write(applications / desktop.name, launcher.encode())
     write(desktop, launcher.encode(), True)
     write(autostart, (launcher + 'X-GNOME-Autostart-enabled=true\nX-GNOME-Autostart-Delay=3\n').encode())
