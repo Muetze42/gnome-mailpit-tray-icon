@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Mailpit
+Comment=Manage the local Mailpit server from the system tray
+Exec=@EXEC@
+Icon=mailpit-running
+Terminal=false
+Categories=Development;
+Keywords=Mailpit;SMTP;Email;Test;
+StartupNotify=false

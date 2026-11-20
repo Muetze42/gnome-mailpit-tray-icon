@@ -1,0 +1,188 @@
+#!/usr/bin/python3
+"""GNOME tray control for the local Mailpit service."""
+
+from __future__ import annotations
+
+import fcntl
+import os
+from pathlib import Path
+import subprocess
+import threading
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("AyatanaAppIndicator3", "0.1")
+from gi.repository import AyatanaAppIndicator3, GLib, Gtk  # noqa: E402
+
+APP_ID = "mailpit-tray"
+SERVICE = "mailpit.service"
+WEB_URL = "http://127.0.0.1:8025/"
+ICON_DIR = Path.home() / ".local" / "share" / "icons" / "hicolor" / "scalable" / "status"
+ICONS = {
+    "running": ICON_DIR / "mailpit-running.svg",
+    "stopped": ICON_DIR / "mailpit-stopped.svg",
+    "working": ICON_DIR / "mailpit-working.svg",
+    "failed": ICON_DIR / "mailpit-failed.svg",
+}
+
+
+class TrayApp:
+    def __init__(self) -> None:
+        self.state = "unknown"
+        self.busy = False
+
+        self.indicator = AyatanaAppIndicator3.Indicator.new(
+            APP_ID,
+            str(ICONS["stopped"]),
+            AyatanaAppIndicator3.IndicatorCategory.SYSTEM_SERVICES,
+        )
+        self.indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
+        self.indicator.set_title("Mailpit")
+
+        menu = Gtk.Menu()
+        self.status_item = Gtk.MenuItem(label="Checking status…")
+        self.status_item.set_sensitive(False)
+        menu.append(self.status_item)
+        menu.append(Gtk.SeparatorMenuItem())
+
+        self.start_item = Gtk.MenuItem(label="Start Mailpit")
+        self.start_item.connect("activate", self.start)
+        menu.append(self.start_item)
+
+        self.stop_item = Gtk.MenuItem(label="Stop Mailpit")
+        self.stop_item.connect("activate", self.stop)
+        menu.append(self.stop_item)
+
+        self.web_item = Gtk.MenuItem(label="Open web interface")
+        self.web_item.connect("activate", self.open_web)
+        menu.append(self.web_item)
+
+        menu.append(Gtk.SeparatorMenuItem())
+        quit_item = Gtk.MenuItem(label="Quit tray app")
+        quit_item.connect("activate", lambda _item: Gtk.main_quit())
+        menu.append(quit_item)
+
+        menu.show_all()
+        self.indicator.set_menu(menu)
+        self.refresh_status()
+        GLib.timeout_add_seconds(3, self.refresh_status)
+
+    @staticmethod
+    def service_state() -> str:
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", "is-active", SERVICE],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return "failed"
+        status = result.stdout.strip()
+        if status == "active":
+            return "running"
+        if status in ("activating", "deactivating", "reloading"):
+            return "working"
+        if status == "failed":
+            return "failed"
+        return "stopped"
+
+    def refresh_status(self) -> bool:
+        self._set_display("working" if self.busy else self.service_state())
+        return True
+
+    def _set_display(self, state: str) -> None:
+        if state == self.state:
+            return
+        self.state = state
+        labels = {
+            "running": "Mailpit is running – SMTP 1025 / Web 8025",
+            "stopped": "Mailpit is stopped",
+            "working": "Mailpit status is changing…",
+            "failed": "Mailpit failed to start",
+        }
+        descriptions = {
+            "running": "Mailpit is running",
+            "stopped": "Mailpit is stopped",
+            "working": "Mailpit is busy",
+            "failed": "Mailpit error",
+        }
+        self.indicator.set_icon_full(str(ICONS[state]), descriptions[state])
+        self.status_item.set_label(labels[state])
+        self.start_item.set_sensitive(state in ("stopped", "failed"))
+        self.stop_item.set_sensitive(state == "running")
+        self.web_item.set_sensitive(state == "running")
+
+    def start(self, _item: Gtk.MenuItem) -> None:
+        self._run_action("start")
+
+    def stop(self, _item: Gtk.MenuItem) -> None:
+        self._run_action("stop")
+
+    def _run_action(self, action: str) -> None:
+        if self.busy:
+            return
+        self.busy = True
+        self._set_display("working")
+        threading.Thread(target=self._action_worker, args=(action,), daemon=True).start()
+
+    def _action_worker(self, action: str) -> None:
+        try:
+            result = subprocess.run(
+                ["systemctl", "--user", action, SERVICE],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+            if result.returncode != 0:
+                message = (result.stderr or result.stdout).strip() or "Unknown error"
+                GLib.idle_add(self.notify, f"Mailpit {action} failed: {message}", "dialog-error")
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            GLib.idle_add(self.notify, f"Could not change Mailpit service state: {exc}", "dialog-error")
+        GLib.idle_add(self._finish_action)
+
+    def _finish_action(self) -> bool:
+        self.busy = False
+        self.state = "unknown"
+        self.refresh_status()
+        return False
+
+    def open_web(self, _item: Gtk.MenuItem) -> None:
+        if self.service_state() != "running":
+            self.notify("Mailpit is not running.", "dialog-warning")
+            return
+        try:
+            subprocess.Popen(["xdg-open", WEB_URL], start_new_session=True)
+        except OSError as exc:
+            self.notify(f"Could not open the browser: {exc}", "dialog-error")
+
+    @staticmethod
+    def notify(message: str, icon: str = "mail-unread") -> bool:
+        subprocess.Popen(["notify-send", "--icon", icon, "Mailpit", message])
+        return False
+
+
+def acquire_single_instance_lock():
+    runtime_dir = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
+    lock = open(runtime_dir / f"{APP_ID}-{os.getuid()}.lock", "w", encoding="utf-8")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        subprocess.Popen(["notify-send", "Mailpit", "The tray app is already running."])
+        raise SystemExit(0)
+    return lock
+
+
+def main() -> int:
+    instance_lock = acquire_single_instance_lock()
+    TrayApp()
+    Gtk.main()
+    instance_lock.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,12 @@
+[Unit]
+Description=Mailpit local email testing server
+Documentation=https://mailpit.axllent.org/
+
+[Service]
+Type=simple
+ExecStart=@MAILPIT@ --listen 127.0.0.1:8025 --smtp 127.0.0.1:1025
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
