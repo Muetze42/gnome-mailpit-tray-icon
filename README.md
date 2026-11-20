@@ -24,7 +24,7 @@ sudo apt install python3
 ### Desktop dependencies:
 
 ```sh
-sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 libnotify-bin xdg-utils xdg-user-dirs gnome-shell-extension-appindicator
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 libnotify-bin xdg-utils gnome-shell-extension-appindicator
 ```
 
 ## Install
@@ -44,9 +44,8 @@ Installation enables and starts `mailpit.service`. `--no-start` skips service en
 | User service | `$XDG_CONFIG_HOME/systemd/user/mailpit.service` |
 | Tray autostart | `$XDG_CONFIG_HOME/autostart/mailpit-tray.desktop` |
 | Application launcher | `~/.local/share/applications/mailpit-tray.desktop` |
-| Desktop shortcut | XDG desktop directory, falling back to `~/Desktop` |
 
-`XDG_CONFIG_HOME` defaults to `~/.config`. Existing files are backed up as `.bak` (replaced on subsequent installs). GNOME may require **Allow Launching** for the desktop shortcut.
+`XDG_CONFIG_HOME` defaults to `~/.config`. Existing files are backed up as `.bak` (replaced on subsequent installs).
 
 ## Runtime
 

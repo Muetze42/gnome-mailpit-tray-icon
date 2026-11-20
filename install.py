@@ -18,7 +18,7 @@ def main():
     if not binary:
         parser.error('Install Mailpit first or pass --mailpit /absolute/path/to/mailpit')
     subprocess.run(['/usr/bin/python3', '-c', 'import gi; gi.require_version("Gtk", "3.0"); gi.require_version("AyatanaAppIndicator3", "0.1"); from gi.repository import Gtk, AyatanaAppIndicator3'], check=True)
-    for command in ('systemctl', 'xdg-open', 'notify-send', 'xdg-user-dir'):
+    for command in ('systemctl', 'xdg-open', 'notify-send'):
         if not shutil.which(command):
             parser.error(f'Missing dependency: {command}')
     source = Path(__file__).resolve().parent
@@ -29,10 +29,6 @@ def main():
     applications = home / '.local/share/applications'
     unit = config / 'systemd/user/mailpit.service'
     autostart = config / 'autostart/mailpit-tray.desktop'
-    desktop_dir = Path(subprocess.check_output(['xdg-user-dir', 'DESKTOP'], text=True).strip())
-    if not desktop_dir.is_absolute() or desktop_dir == home:
-        desktop_dir = home / 'Desktop'
-    desktop = desktop_dir / 'mailpit-tray.desktop'
     # Keep pre-existing files so a repeated installation is recoverable.
     def write(path, data, executable=False):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,8 +46,7 @@ def main():
     # Resolve the SVG directly instead of relying on the desktop's icon cache.
     icon_path = str(icons / 'mailpit-running.svg').replace('\\', '\\\\')
     launcher = launcher.replace('@ICON@', icon_path)
-    write(applications / desktop.name, launcher.encode())
-    write(desktop, launcher.encode(), True)
+    write(applications / 'mailpit-tray.desktop', launcher.encode())
     write(autostart, (launcher + 'X-GNOME-Autostart-enabled=true\nX-GNOME-Autostart-Delay=3\n').encode())
     executable = str(Path(binary).resolve()).replace('\\', '\\\\').replace('"', '\\"').replace('%', '%%').replace('$', '$$')
     service = (source / 'mailpit.service').read_text().replace('@MAILPIT@', '"' + executable + '"')
@@ -59,8 +54,7 @@ def main():
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
     if not args.no_start:
         subprocess.run(['systemctl', '--user', 'enable', '--now', 'mailpit.service'], check=True)
-    print(f'Installed. Start {app} or open the Mailpit launcher. Desktop shortcut: {desktop}')
-    print('GNOME may require right-click → Allow Launching on the desktop shortcut.')
+    print(f'Installed. Start {app} or open Mailpit from the application menu.')
 
 
 if __name__ == '__main__':
